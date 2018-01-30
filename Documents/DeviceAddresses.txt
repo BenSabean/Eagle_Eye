@@ -1,0 +1,11 @@
+DS2438 Sensors
+Family - 26
+
+Starting from the IC close to PSU connector and down
+
+1: 26 ED 21 CF 01 00 00 3F
+2: 26 0F 51 CF 01 00 00 15
+3: 26 1B 34 CF 01 00 00 51
+4: 26 E4 43 CF 01 00 00 3B
+
+
