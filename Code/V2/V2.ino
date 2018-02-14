@@ -41,19 +41,16 @@ DS2438 chip[4] = {
 
 //------------------MQTT-----------------------//
 #define MQTT_PORT
-#define DEVICE_ID 1
+#define DEVICE_ID 4
 /* Wifi setup */
-const char* ssid =        "Wireless_AP082574";     //  AER172-2
-const char* password =    "8146001239";            //  80mawiomi*
+const char* ssid =        "BELL643";     //  Wireless_AP082574
+const char* password =    "home5055";  //  8146001239
 /* MQTT connection setup */
-const char* mqtt_server = "aerlab.ddns.net";
+const char* mqtt_server = "192.168.2.21";
 const char* mqtt_user =   "aerlab";
 const char* mqtt_pass =   "server";
 /* Topic Setup */
-const char* location =        "Home";
-const char* systemName =      "EnergyMonitor";
-const char* subSystem =       "EagleEye";
-const char* transducerType =  "Current";
+const char* ID = "0";
 char gTopic[64];          // Stores the gTopic being sent
 
 WiFiClient espClient;
@@ -82,8 +79,7 @@ void setup()
 
   //  Wifi Setup  //
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-    delay(500);
+  while (WiFi.status() != WL_CONNECTED) delay(500);
 
   // -----------DEBUG----------------
   Serial.println("WiFi connected");
@@ -92,69 +88,70 @@ void setup()
 
   // Setting the callback function
   client.setCallback(callback);
+  // check for MQTT Connection
+  if (!client.connected()) reconnect();
+  client.loop();          // Listening loop
+  start_listen();
 
-  //  check for MQTT Connection
-  if (!client.connected())
-    reconnect();
-
-  for (uint8_t i = 0; i < 8; i++)
-  {
-    sprintf(gTopic, "%s/%s/%s/%s/%s/%s%i", location, systemName, subSystem, transducerType, "Control", "slope", i);
-    client.subscribe(gTopic, 1);
-  }
-  for (uint8_t i = 0; i < 8; i++)
-  {
-    sprintf(gTopic, "%s/%s/%s/%s/%s/%s%i", location, systemName, subSystem, transducerType, "Control", "offset", i);
-    client.subscribe(gTopic, 1);
-  }
 }
 
 // ------------------ LOOP --------------------//
 void loop()
 {
-  bool published;           // Indicates succesful publish
+  bool published;            // Indicates succesful publish
   float data = 0;           // Temprary stored message to publish
   uint8_t deviceCount = 0;  // Tracks number of active CT's
   String Temperature;       // Stores temperature
 
-  /* Reconfigure Slope and Offset */
-  for (uint8_t i = 0; i < 4; i++)
-    chip[i].begin(slope[i * 2], offset[i * 2], slope[i * 2 + 1], slope[i * 2 + 1]);
+  Serial.println("LOOP");   // DEBUG
+  print_parameters();       // DEBUG
 
-  client.loop(); // Listening loop
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    // check for MQTT Connection
+    if (!client.connected()) reconnect();
+    client.loop();          // Listening loop
 
-  /*  Update Current Temperature  */
-  for (uint8_t i = 0; i < 4; i++)  chip[i].update();
+    /* Reconfigure Slope and Offset */
+    for (uint8_t i = 0; i < 4; i++)
+      chip[i].begin(slope[i * 2 + 1], offset[i * 2 + 1], slope[i * 2], offset[i * 2]);
 
-  /*  Publish CT data  */
-  for (uint8_t i = 0; i < 4; i++)
-  { /* Channel 1 Data */
-    data = chip[i].getCurrent(DS2438_CHB);
-    sprintf(gTopic, "%s/%s/%s/%s/%s/%s%i", location, systemName, subSystem, transducerType, "Data" , "CT", i * 2);
-    published = client.publish(gTopic, String(data).c_str());
+    /*  Update Current Temperature  */
+    for (uint8_t i = 0; i < 4; i++)  chip[i].update();
+
+    /*  Publish CT data  */
+    for (uint8_t i = 0; i < 4; i++)
+    { /* Channel 1 Data */
+      data = chip[i].getCurrent(DS2438_CHB);
+      sprintf(gTopic, "%s/%s/%s%i", ID, "Data" , "CT", i * 2 + 1);
+      published = client.publish(gTopic, String(data).c_str());
+      if (data > THRESHOLD)  deviceCount ++;   // Counting active sensors
+      print_message(String(gTopic), String(data), published);
+      /* Channel 2 Data */
+      data = chip[i].getCurrent(DS2438_CHA);
+      sprintf(gTopic, "%s/%s/%s%i", ID, "Data" , "CT", i * 2 + 2);
+      published = client.publish(gTopic, String(data).c_str());
+      if (data > THRESHOLD)  deviceCount ++;   // Counting active sensors
+      print_message(String(gTopic), String(data), published);
+    }
+
+    /*  Get & Publish average temperature  */
+    Temperature = avgTemperature();
+    sprintf(gTopic, "%s/%s/%s", ID, "Temperature" , "Average");
+    published = client.publish(gTopic, Temperature.c_str());
+    //print_message(String(gTopic), String(Temperature), published);
+
+    /*  Publish number of active CT's */
+    sprintf(gTopic, "%s/%s/%s", ID, "Status" , "DeviceCount");
+    published = client.publish(gTopic, String(deviceCount).c_str());
     if (data > THRESHOLD)  deviceCount ++;   // Counting active sensors
-    print_message(String(gTopic), String(data), published);
-    /* Channel 2 Data */
-    data = chip[i].getCurrent(DS2438_CHA);
-    sprintf(gTopic, "%s/%s/%s/%s/%s/%s%i", location, systemName, subSystem, transducerType, "Data" , "CT", i * 2 + 1);
-    published = client.publish(gTopic, String(data).c_str());
-    if (data > THRESHOLD)  deviceCount ++;   // Counting active sensors
-    print_message(String(gTopic), String(data), published);
+    //print_message(String(gTopic), String(deviceCount), published);
   }
-
-  /*  Get & Publish average temperature  */
-  Temperature = avgTemperature();
-  sprintf(gTopic, "%s/%s/%s/%s/%s/%s", location, systemName, subSystem, "Temperature", "Data" , "Average");
-  published = client.publish(gTopic, Temperature.c_str());
-  print_message(String(gTopic), String(data), published);
-
-  /*  Publish number of active CT's */
-  sprintf(gTopic, "%s/%s/%s/%s/%s/%s", location, systemName, subSystem, transducerType, "Status" , "DeviceCount");
-  published = client.publish(gTopic, String(deviceCount).c_str());
-  if (data > THRESHOLD)  deviceCount ++;   // Counting active sensors
-  print_message(String(gTopic), String(data), published);
-
-  delay(500);
+  else {
+    /* If wifi disconnected try again */
+    WiFi.begin(ssid, password);
+  }
+  delay(2000);
 }
 
 /*
@@ -181,7 +178,10 @@ void reconnect()
 
     // Attempt to connect
     if (client.connect(clientName.c_str(), mqtt_user, mqtt_pass))
+    {
       Serial.println("connected");
+      start_listen();
+    }
     else
     {
       Serial.print("failed, rc=");
@@ -216,27 +216,50 @@ void print_message(String topic, String data, bool published)
 void callback(char* topic, byte* payload, unsigned int lenght)
 {
   char temp[64];
-  /* Enter the function for this specific topic */
+  sprintf(temp, "%s", (char *)payload);
+  Serial.println("PAYLOAD: " + String(String(temp).toFloat())); // DEBUG
+  /* Check for matching topic */
   for (uint8_t i = 0; i < 8; i++)
   {
-    sprintf(gTopic, "%s/%s/%s/%s/%s/%s%i", location, systemName, subSystem, transducerType, "Control", "slope", i);
+    sprintf(gTopic, "%s/%s/%s%i", ID, "Control", "slope", i + 1);
     if (strcmp(gTopic, topic) == 0)
-    {
-      sprintf(temp, "%s", (char *)payload);
       slope[i] = String(temp).toFloat();
-    }
-    Serial.println("GOT " + String(slope[i]));
+
   }
   for (uint8_t i = 0; i < 8; i++)
   {
-    sprintf(gTopic, "%s/%s/%s/%s/%s/%s%i", location, systemName, subSystem, transducerType, "Control", "offset", i);
+    sprintf(gTopic, "%s/%s/%s%i", ID, "Control", "offset", i + 1);
     if (strcmp(gTopic, topic) == 0)
-    {
-      sprintf(temp, "%s", (char *)payload);
       offset[i] = String(temp).toFloat();
-    }
-    Serial.println("GOT " + String(offset[i]));
+
   }
+}
+
+/* Subscribes to specific topic from the server */
+void start_listen()
+{
+  for (uint8_t i = 1; i < 9; i++)
+  {
+    sprintf(gTopic, "%s/%s/%s%i", ID, "Control", "slope", i);
+    client.subscribe(gTopic, 1);
+    client.loop();
+  }
+  for (uint8_t i = 1; i < 9; i++)
+  {
+    sprintf(gTopic, "%s/%s/%s%i", ID, "Control", "offset", i);
+    client.subscribe(gTopic, 1);
+    client.loop();
+  }
+}
+
+/* DEBUG function to print all slope's and offsets */
+void print_parameters()
+{
+  Serial.print("SLOPES: ");
+  for (uint8_t i = 0; i < 8; i++) Serial.print(String(slope[i]) + " ");
+  Serial.print("\nOFFSETS: ");
+  for (uint8_t i = 0; i < 8; i++) Serial.print(String(offset[i]) + " ");
+  Serial.println();
 }
 
 

@@ -14,7 +14,7 @@
 #include <PubSubClient.h>           // MQTT publisher/subscriber client 
 #include <stdio.h>
 
-#define DEBUG false
+#define DEBUG true
 
 //  Chip Calibration  //
 //--------- CT1---------//
@@ -65,8 +65,8 @@ DS2438 chip4(&ow, chip4_address);
 #define MQTT_PORT
 #define DEVICE_ID 1
 /* Wifi setup */
-const char* ssid =        "Wireless_AP082574";     //  AER172-2
-const char* password =    "8146001239";   //  80mawiomi*
+const char* ssid =        "AER172-2";     //  AER172-2
+const char* password =    "80mawiomi*";   //  80mawiomi*
 /* MQTT connection setup */
 const char* mqtt_server = "aerlab.ddns.net";
 const char* mqtt_user =   "aerlab";
