@@ -9,10 +9,11 @@
 */
 
 #include <OneWire.h>                // Library for One-Wire interface
-#include <DS2438.h>
 #include <ESP8266WiFi.h>            // ESP WiFi Libarary
 #include <PubSubClient.h>           // MQTT publisher/subscriber client 
 #include <stdio.h>
+#include "DS2438.h"                 // Modified library to communicate with DS2438 
+                                    // OneWire ICs
 
 //  Threshold for active CT //
 #define THRESHOLD    0.1
@@ -43,8 +44,8 @@ DS2438 chip[4] = {
 #define MQTT_PORT
 #define DEVICE_ID 4
 /* Wifi setup */
-const char* ssid =        "BELL643";     //  Wireless_AP082574
-const char* password =    "home5055";  //  8146001239
+const char* ssid =        "";
+const char* password =    "";
 /* MQTT connection setup */
 const char* mqtt_server = "192.168.2.21";
 const char* mqtt_user =   "aerlab";
