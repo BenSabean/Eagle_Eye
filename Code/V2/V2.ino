@@ -11,9 +11,10 @@
 #include <OneWire.h>                // Library for One-Wire interface
 #include <ESP8266WiFi.h>            // ESP WiFi Libarary
 #include <PubSubClient.h>           // MQTT publisher/subscriber client 
+#include <EEPROM.h>                 // Wrie/Read EEPROM
 #include <stdio.h>
 #include "DS2438.h"                 // Modified library to communicate with DS2438 
-                                    // OneWire ICs
+// OneWire ICs
 
 //  Threshold for active CT //
 #define THRESHOLD    0.1
@@ -24,6 +25,7 @@ float offset[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 // define the Arduino digital I/O pin to be used for the 1-Wire network here
 const uint8_t ONE_WIRE_PIN = 12;
+const uint8_t numCT = 8;
 
 // define the 1-Wire address of the DS2438 battery monitor here (lsb first)
 uint8_t chip1_address[] = { 0x26, 0xED, 0x21, 0xCF, 0x01, 0x00, 0x00, 0x3F };
@@ -62,7 +64,12 @@ String clientName;
 void setup()
 {
   Serial.begin(115200);
+  EEPROM.begin(512);
   Serial.println("START");
+
+  //setEEPROM();    //Only for reseting EEPROM to default value.
+  readEEPROM();
+  printConstants();
 
   //  MQTT Setup  //
   client.setServer(mqtt_server, 1883);
@@ -261,6 +268,41 @@ void print_parameters()
   Serial.print("\nOFFSETS: ");
   for (uint8_t i = 0; i < 8; i++) Serial.print(String(offset[i]) + " ");
   Serial.println();
+}
+
+void setEEPROM() {
+  //  Chip Calibration constants //
+  const float newSlope[numCT]  = {0.00408f, 3.9726f, 0.00408f, 0.8178f, 1.0f, 0.7273f, 1.0f, 3.5359f};
+  const float newOffset[numCT] = { -0.003852f, -0.0137f, -0.00027f, -0.035f, 0.0f, -0.0265f, 0.0f, -0.0102f};
+  for (uint8_t i = 0; i < numCT; i++) {
+    EEPROM.put(i * sizeof(float), newSlope[i]);
+    EEPROM.put((numCT * sizeof(float)) + (i * sizeof(float)), newOffset[i]);
+    //EEPROM.write(i*sizeof(float), newSlope[i]);
+    //EEPROM.write((numCT*sizeof(float)) + (i*sizeof(float)), newOffset[i]);
+  }
+  EEPROM.commit();
+}
+
+void readEEPROM() {
+  float f = 0.0;
+  for (uint8_t i = 0; i < (numCT * 2); i++) {
+    EEPROM.get(i * sizeof(float), f );
+    if (i < numCT)     slope[i] = f;
+    else               offset[i - numCT] = f;
+  }
+}
+
+void printConstants() {
+  Serial.println("Slope:");
+  for (uint8_t i = 0; i < numCT; i ++) {
+    Serial.print("Address " + String(i * sizeof(float)) + ": ");
+    Serial.println(slope[i]);
+  }
+  Serial.println("Offset:");
+  for (uint8_t i = 0; i < numCT; i ++) {
+    Serial.print("Address " + String((numCT * sizeof(float)) + (i * sizeof(float))) + ": ");
+    Serial.println(offset[i]);
+  }
 }
 
 
